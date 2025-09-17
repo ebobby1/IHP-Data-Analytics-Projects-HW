@@ -1,0 +1,202 @@
+---
+title: "Nurse Stress Regression Analysis DA821"
+author: "Ellen Bobby"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if (!require(foreign)) install.packages('foreign')
+library(foreign)
+if (!require(ggplot2)) install.packages('ggplot2')
+library(ggplot2)
+if (!require(MASS)) install.packages('MASS')
+library(MASS)
+if (!require(Hmisc)) install.packages('Hmisc')
+library(Hmisc)
+if (!require(reshape2)) install.packages('reshape2')
+library(reshape2)
+if (!require(brant)) install.packages('brant')
+library(brant)
+if (!require(car)) install.packages('car')
+library(car)
+if (!require(DescTools)) install.packages('DescTools')
+library(DescTools)
+if (!require(GGally)) install.packages('GGally')
+library(GGally)
+if (!require(VGAM)) install.packages('VGAM')
+library(VGAM)
+if (!require(DescTools)) install.packages('DescTools')
+library(DescTools)
+if (!require(ResourceSelection)) install.packages('ResourceSelection')
+library(ResourceSelection)
+```
+
+```{r include=FALSE}
+df <- read.spss("Nurses.sav", to.data.frame = TRUE)
+```
+
+```{r include=FALSE}
+df$age <- as.numeric(as.character(df$age))
+df$gender <- as.factor(df$gender)
+df$hospital <- as.factor(df$hospital)
+df$ward <- as.factor(df$ward)
+df$wardid <- as.factor(df$wardid)
+df$nurse <- as.factor(df$nurse)
+df$stress <- factor(df$stress, ordered = TRUE)
+#standardize the dataframe
+```
+**Literature Review**
+Stress in nurses is a long studied concern for healthcare and has wide negative effects.  Elevated stress levels are associated with negative health in nurses such as anxiety, depression, and sleep disorders (Hosseini & Hosseini, 2024).  Increased stress is also associated with intent to leave the profession, contributing to the global nursing shortage (Xu et al, 2023).  Increased stress levels may also be associated with negative patient outcomes (Arnetz et al, 2019).  Ongoing research is needed to evaluate effective strategies to mitigate nurse stress levels to improve both nurse and patient health.  
+
+**Research Question**
+What is the probability of nurses reporting lower stress levels in
+relation to participation in the stress training program, controlling
+for age, experience, ward type and gender?
+
+**Dataset Description** In each of 25 hospitals, four wards are selected
+and randomly assigned to an experimental and a control condition. In the
+experimental condition, a training program is offered to all nurses to
+cope with job-related stress. After the program is completed, a sample
+of about 10 nurses from each ward is given a test that measures
+job-related stress.
+
+The population from which the data is collected from is nurses working
+on either generalized or specialized care wards in 25 different
+hospitals of varying size.
+
+The unit of observation is nurses.
+
+Dependent Variable stress - self rated stress level of nurse on a scale
+of 1-7, 1 = lowest and 7 = highest 
+Independent Variables included in regression 
+expcon: nurses are either experiment or control group 
+experien: Nursing experience in years 
+age: age of nurse in years
+wardtype: type of ward nurse works on, (0 = general care, 1 = special care)
+gender: nurse gender (0 = male, 1 = female)
+
+**Model Type**
+An ordinal logistic regression is used to analyze the dataset because the dependent variable, nurse stress, is an ordered categorical variable ranging from 1 to 7. This model is appropriate because it accounts for the inherent hierarchal ranking of stress levels. The independent variables of experiment vs control, age, experience level, ward type and gender are included in the model because they are potential predictors of nurse stress.  By including these variables in the model we hope to asses the relationship between the stress training program and self reported nurse stress level while controlling for individual and workplace characteristics.  
+
+**Datatset Descriptive Statistics**
+
+```{r, echo=FALSE}
+summary(df[c("stress","age","gender","experien","wardtype","expcon")])
+```
+
+```{r, echo=FALSE}
+boxplot(stress ~ expcon, data = df)
+title("Distribution of nurse stress scores in 
+      Control versus Experiment groups")
+```
+
+```{r, echo=FALSE}
+boxplot(stress ~ wardtype, data = df)
+title("Distribution of stress scores in 
+      General Care versus Special Care wards.")
+```
+
+```{r echo=FALSE}
+boxplot(stress ~ gender, data = df, main = " Male                                   Female")
+```
+
+**Model Output**
+```{r echo=FALSE}
+reg1 <- polr(stress ~ age+gender+experien+wardtype+expcon, data = df, Hess = TRUE )
+summary(reg1)
+```
+
+**Confidence Intervals**
+```{r echo=FALSE, message=FALSE}
+(ci <- confint(reg1))
+exp(cbind(OR = coef(reg1), ci))
+```
+```{r include=FALSE}
+(cstable <- coef(summary(reg1)))
+```
+**P Values**
+```{r echo=FALSE}
+p <- pnorm(abs(cstable[, 't value']), lower.tail = FALSE) * 2
+## combined table
+(cstable <- cbind(cstable, 'p value' = p))  
+```
+
+**Model Result Interpretation**
+The model shows that for nurses in the experimental group, the odds of reporting higher levels of stress are 79.5% lower than for nurses in the control group, controlling for age, experience, gender and ward type.  Nurses in the control group odds of reporting higher stress levels are 4.88 times greater than those in the experimental group, controlling for age, experience, gender and ward type. However results cannot be trusted until ordinal logistic tests of assumptions are met.  
+
+**Goodness of Fit**
+Pseudo R-squared
+```{r echo=FALSE}
+PseudoR2(reg1)
+```
+
+**Logistic Regression Assumptions**
+According to Safari (n.d) one should seek out current best practices for ordinal logistic regression.The recommended assumptions are below (Lee, 2021)(Rusid, 2024).
+
+*Dependent Variable are ordered.*
+The dependent variable is stress on a scale of 1 to 7, 1 being lowest stress level and 7 highest.
+
+*One or more of the independent variables are either continuous, categorical or ordinal*
+gender - categorical, wardtype - categorical, age - continuous, experien - continuous, expcon - categorical
+
+*Multicollinearity*
+```{r echo=FALSE}
+#ref https://medium.com/evangelinelee/ordinal-logistic-regression-on-world-happiness-report-221372709095
+
+df_var <- df[, c("age", "gender", "experien", "wardtype", "expcon")]
+library(GGally)
+ggpairs(df_var, title = "Correlation Plot between each Variable")
+```
+
+```{r echo=FALSE}
+car::vif(reg1)
+# ref https://www.sthda.com/english/articles/39-regression-model-diagnostics/160-multicollinearity-essentials-and-vif-in-r/#detecting-multicollinearity
+#values should be <4 per Safari(N.D.)
+```
+
+Based on the ggpairs plot, experience seemed to have a high multicollinearity. So next step was to test Variance Inflation Factor (VIF) to check if multicollinearity exists.  Because the values are less than 4 we can pass this test of assumption (Lee, 2021).  
+
+*Proportional Odds*
+The relationship between each pair of outcome groups is the same. 
+
+Brant Test assesses whether the observed deviations from our Ordinal Logistic Regression model are larger than what could be attributed to chance alone (Lee, 2019).  
+```{r echo=FALSE}
+brant(reg1)
+```
+
+```{r echo=FALSE}
+# partial proportional odds
+#ref https://medium.com/@rais.sulaiman/proportional-odds-and-partial-proportional-odds-for-ordinal-data-analysis-432b2269ffb6
+library(VGAM)
+
+m_ppo <- vglm(stress ~ age + gender + experien + wardtype + expcon, 
+              family = cumulative(link = "logitlink", 
+              parallel = TRUE ~ -1 + experien + wardtype + expcon), 
+              data = df)
+summary(m_ppo)
+```
+Based on the Brant test and PPO the proportional odds assumption is violated, experience, ward type and expcon coefficients vary across categories. So we would have to define different sets of coefficients in our model to describe the relationship between each pair of outcome groups (Safari, n.d). Based on this violation the results of the model cannot be trusted.  
+
+**Limitations**
+The Pseudo R-2 value indicates that the model only explains about 9.5% of the variance in stress levels, indicating weak explanatory power of the model.  It is possible the model is not including predictors that influence stress such as patient ratio or nurse shift times (night versus day shift).  
+
+The proportional odds assumption is violated for experience and expcon, indicating that the effects vary across stress levels. So I then attempted a partial proportional odds model, which allows these variables to have different coefficients at different stress levels, but the violation was still present. 
+
+
+*References*
+Lee, E. (2021, December 10). Ordinal Logistic Regression and its Assumptions — Brant Test. Medium. https://medium.com/evangelinelee/brant-test-for-proportional-odds-in-r-b0b373a93aa2
+
+Rusid, R. S. (2024, September 9). Proportional odds and partial proportional odds for ordinal data analysis. Medium. https://medium.com/@rais.sulaiman/proportional-odds-and-partial-proportional-odds-for-ordinal-data-analysis-432b2269ffb6
+
+Hosseini, S. A., & Hosseini Sharif, S. Z. (2024). The impact of Coronavirus-Related Stress Coping Styles and Nurse-Physician Relationship on nurses’ Mental Health. International Journal of Travel Medicine & Global Health, 12(2), 129–137. https://doi-org.treadwell.idm.oclc.org/10.30491/IJTMGH.2024.442299.1408
+
+Xu, J.-B., Zheng, Q.-X., Jiang, X.-M., Zhuo, Q., Nian, J.-X., & Wang, J.-T. (2023). Mediating effects of social support, mental health between stress overload, fatigue and turnover intention among operating theatre nurses. BMC Nursing, 22(1), 1–15. https://doi-org.treadwell.idm.oclc.org/10.1186/s12912-023-01518-z
+
+Arnetz, J. , Sudan, S. , Goetz, C. , Counts, S. & Arnetz, B. (2019). Nurse Work Environment and Stress Biomarkers. Journal of Occupational and Environmental Medicine, 61 (8), 676-681. doi: 10.1097/JOM.0000000000001642.
+
+
+

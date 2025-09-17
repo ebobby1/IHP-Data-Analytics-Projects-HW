@@ -1,0 +1,189 @@
+---
+title: "DA821 Final Project"
+author: "Ellen Bobby"
+date: "2025-02-14"
+output: pdf_document
+---
+# What is the relationship between nurse stress levels and ward type, controlling for age, experience, and hospital size?
+
+#Dataset Description
+In each of 25 hospitals, four wards are selected and randomly assigned to an experimental and a control condition. In the experimental condition, a training program is offered to all nurses to cope with job-related stress. After the program is completed, a sample of about 10 nurses from each ward is given a test that measures job-related stress.
+
+The population from which the data is collected from is nurses working on either generalized or specialized care wards in 25 different hospitals of varying size.   
+
+The unit of observation is nurses.  
+
+Dependent Variable 
+	stress - self rated stress level of nurse on a  scale of 0-10
+Independent Variables included in regression
+  expcon: nurses are either experiment or control group
+	wardtype: type of ward nurse works on, (0 = general care, 1 = special care)
+	experien: Nursing experience in years
+	age: age of nurse in years
+	gender: nurse gender (0 = male, 1 = female)
+	
+#Model Choice
+This analysis aims to examine the impact of the stress training program on nurse stress levels, controlling for age, gender, ward type and nursing experience in years. Due to the hierarchical structure of the dataset and limitations of this analyst, a CEM approach is used prior to OLS method. This approach matches observations on specific covariates to ensure that ward type does not disproportionately influence stress levels between the treatment and control groups and age, experience, and gender are balanced across groups. Maintaining a one level analysis approptriate for OSL.  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+if (!require(foreign)) install.packages('foreign')
+library(foreign)
+df <- read.spss("Nurses.sav", to.data.frame = TRUE)
+```
+
+```{r}
+df$age <- as.numeric(as.character(df$age))
+df$gender <- as.factor(df$gender)
+df$hospital <- as.factor(df$hospital)
+df$ward <- as.factor(df$ward)
+df$wardid <- as.factor(df$wardid)
+df$nurse <- as.factor(df$nurse)
+#standardize the dataframe
+```
+
+#Datatset Descriptive Statistics
+
+```{r}
+summary(df[c("stress","age","gender","experien","wardtype","hospsize","expcon")])
+```
+Distribution of nurse stress scores in Control versus Experiment groups
+```{r}
+boxplot(stress ~ expcon, data = df)
+```
+
+#Distribution of stress scores in general care versus special care wards.
+```{r}
+boxplot(stress ~ wardtype, data = df)
+```
+
+#Distribution of stress scores males versus females
+```{r}
+boxplot(stress ~ gender, data = df, main = "Male                                         Female")
+```
+
+```{r}
+hist(df$experien, main = "Distribution of Nursing Years Experience",
+     xlab= "Years", ylab = "Nurses")
+```
+
+```{r}
+hist(df$age, main = "Distribution of Nurse Age", xlab = "Years", ylab = "Nurses")
+```
+
+```{r}
+library(MatchIt)
+# CEM
+rn <- matchit(expcon ~ experien + age + gender + wardtype, data = df, method = "cem")
+# Check balance after matching
+summary(rn)
+```
+
+```{r}
+plot(summary(rn))
+```
+```{r}
+rn.matched <- match.data(rn)
+```
+
+```{r}
+#there still may be minor differences in the treatment and control groups. The balanced dataset isn’t perfect. Therefore, we still include all of the control variables in our OLS model just to be safe.
+reg1 <- lm(stress ~ expcon + experien + age + gender + wardtype, data = rn.matched, weights = weights)
+summary(reg1)
+```
+```{r}
+if (!require(lmtest)) install.packages('lmtest')
+library(lmtest)
+if (!require(sandwich)) install.packages('sandwich')
+library(sandwich)
+#Robust Standard Errors
+coeftest(reg1, vcov = vcovHC, type = "HC1")
+confint(coeftest(reg1, vcov = vcovHC, type = "HC1"))
+```
+
+#Diagnostic Tests of Assumptions
+
+```{r}
+#Residual errors are uncorrelated with all independent variables & Linearity of data  
+if (!require(car)) install.packages('car')
+library(car)
+residualPlots(reg1)
+```
+
+```{r}
+#residual errors are normally distributed
+reg1resid <- resid(reg1)
+hist(reg1resid, main = "Residual Distribution")
+```
+
+```{r}
+#residual errors are normally distributed
+qqPlot(reg1)
+```
+
+```{r}
+#all residuals are independent of (uncorrelated with) each other
+plot(1:nrow(rn.matched), reg1resid,)
+```
+
+```{r}
+#homoscedasticity of residual errors
+library(car)
+residualPlots(reg1, ~1, fitted=TRUE)
+```
+
+```{r}
+#Test for No Multicollinearity
+if (!require(car)) install.packages('car')
+library(car)
+vif(reg1)
+#When a variable has a VIF value of 4 or more, that indicates that multicollinearity might be a problem in our regression model
+```
+
+```{r}
+#Residual errors have a mean of 0
+mean(reg1resid)
+```
+
+#Summary of Linear Tests of Assumptions
+1. Residual Errors are Uncorrelated with Independent Variables & Linearity of Data
+The residual plots for experience and age show straight-line patterns, indicating that residual errors are uncorrelated with these independent variables. The fitted values vs. residuals plot shows a flat line, indicating linearity of data.
+However, the p-value for age suggests that age may have a nonlinear relationship with stress levels.  The ages could be transformed to account for possible non-linearity.  The Tukey’s test further indicates that a different regression model may provide a better fit for the data.  A different model may be a better choice considering the hierarchal nature of the data.
+
+2. Residual Errors are Normally Distributed
+The histogram does not follow a normally distributed pattern, and the qqplot also shows that, it is possible that we could exclude outlier datapoints such as 304 & 335 to improve the residuals distribution
+
+3. Residual Errors are Independent of Each Other (No Autocorrelation)
+The residuals vs. index plot shows overlapping points and clustered patterns, suggesting that the residuals are correlated. This indicates a violation of the independence assumption—likely due to the underlying clustering in the dataset nurses within wards, within hospitals.  A random effects model could account for clustering.
+
+4. Homoscedasticity of Residual Errors
+The residual plot shows a clear pattern, indicating heteroscedasticity.  This is likely due to clustering of data.
+
+5. No Multicollinearity
+Variance Inflation Factor (VIF) values are all < 4, indicating that the independent variables are not highly correlated with each other.
+
+6. Observations are independently and identically distributed
+The intervention and control observations were randomly assigned. However multiple observations are on the same ward and nurses could influence eachothers stress levels so we do not know for certain if the observations are independent of each other.  If only one nurse on the ward was included in the study then I think the observations would be independent of each other.
+
+7. Residual Errors Have a Mean of 0
+The mean residual value is 0.0046, which is close to zero.
+
+# Model Result Interpretations
+
+In our sample the regression shows that nurses who were in the experiment group on average scored 0.71 points lower on stress score compared to the control group, controlling for age, gender and experience level.  The model showed that in our population of interest we are 95% confident that nurse stress scores are at least 0.58 and up to 0.83 points lower compared to nurses in the control group who did not receive a stress reduction program.  However ultimately we cannot  trust the validity of this model because there were several assumptions of  linear modeling that were not met, and a different model may be more appropriate to better handle the multilevel nature of the dataset. 
+
+Conduct a brief literature search relating to nurses and stress. In 5–10 sentences,
+propose possible causal effects related to the results of your analysis. Please
+include at least three references from the primary literature.
+#Literature Review
+
+
+
+
+9. Briefly explain any limitations in your analysis and how you might address them.
+A lack of statistical significance in your model is not considered a limitation.
+
+

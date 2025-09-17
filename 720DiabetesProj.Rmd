@@ -1,0 +1,341 @@
+---
+title: "720 Diabetes Research Project"
+author: "Ellen Bobby"
+date: "2024-10-15"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(foreign)
+db <- read.csv("diabetes.csv", header = TRUE)
+```
+
+```{r}
+if (!require(psych)) install.packages("psych")
+if (!require(dplyr)) install.packages('dplyr')
+if (!require(tidyverse)) install.packages(tidyverse)
+```
+
+# Diabetes Research Project for Data Toolkit 720
+
+## Research Question: Do the variables BMI, weight, hip/waist ratio, total cholesterol, HDL and stabilized glucose have an eﬀect on patient’s A1c level?
+
+The data population is African American adults in Louisa and Buckingham counties in the state of Virginia.
+
+The unit of observation is patients.
+
+Variables is the analysis and their respective unit of measurement: Body Mass Index (BMI) in kilogram per square meter (kg/m2), weight in pounds, hip to waist ratio measured in inches, total cholesterol in milligrams per deciliter (mg/dL), high density lipid cholesterol (HDL) in mg/dL, stabilized glucose mg/dL.
+
+Background: The data was collected by Dr. John Schorling, Department of Medicine, University of Virginia School of Medicine it was used in a study to determine the prevalence of cardiovascular risk factors in African Americans in rural Virginia. There is data on 403 participants. Participants that have missing data in any of the factors will be excluded from analysis. The data categories are total cholesterol, stabilized glucose, HDL, total cholesterol to HDL ratio, HbA1c, location, age, gender 1=female 0=male, height, weight, systolic blood pressure, diastolic blood pressure, waist measurement, hip measurement, diabetes diagnosis 1=yes 0=no, BMI, waist to hip ratio, BMI category 5, age category, waist to hip ratio category, and BMI category 3. I was unable to discern how the author of the data defined BMI category 5, age category, waist to hip ratio category, and BMI category 3.
+
+```{r}
+db <- na.omit(db) #omit missing values
+db <- db %>% drop_na (BMI, weight, waist_hip_ratio, total_cholesterol, hdl, glycosoloatedhgb, stabilized.glucose, gender)  
+```
+
+Patients with missing values were not included in the analysis. 360 patients with complete information were included from total of 403.
+
+```{r}
+# Rename columns
+db <- db %>% rename(a1c = glycosoloatedhgb)
+db <- db %>% rename(tcl = total_cholesterol)
+db <- db %>% rename(dbdiag = diabetes_diagnosis)
+db <- db %>% rename(glucose = stabilized.glucose)
+```
+
+The following graphics explore the distribution of the data
+
+```{r}
+hist(db$age, main = "Participant Ages", xlab = "Years")
+```
+
+```{r}
+db %>%
+  mutate(gender = ifelse(gender == 0, "Male", "Female")) %>%
+  group_by(gender) %>%  
+  summarise(
+    count = n(),  
+    mean = mean(age, na.rm = TRUE))
+```
+
+There were 210 female participants with an average age of 46.5 years and 150 male participants with an average age of 48.5 years.
+
+```{r}
+hist(db$a1c, main = "HbA1c Distribution", xlab = "HbA1c")
+```
+
+```{r}
+summary(db$a1c)
+```
+
+The range for Hemoglobin A1c is as follows Normal: less than 5.7% Prediabetes: between 5.7% - 6.4% Diabetes: greater than 6.5%
+
+```{r}
+boxplot(a1c ~ dbdiag, data = db, names = c("No Diabetes Diagnosis", "Diagnosed Diabetes"),
+        xlab = "Diabetes Diagnosis Status",
+        ylab = "HbA1C Level",
+        main = "HbA1C Levels")
+```
+
+From the above boxplot we can see that the distribution of HgA1c range is higher in patients with a diabetes diagnosis versus no diabetes diagnosis. HbA1c lab value is used in diagnosis of diabetes.
+
+```{r}
+dplyr::group_by(db, dbdiag) %>%
+dplyr::summarise(
+  count = n(),  
+  Mean_A1C = mean(a1c, na.rm = TRUE), 
+  SD_A1C = sd(a1c, na.rm = TRUE)
+) %>%
+dplyr::mutate(diabetes_status = ifelse(dbdiag == 1, "Diabetes", "No Diabetes")) %>%
+dplyr::select(diabetes_status, count, Mean_A1C, SD_A1C)
+```
+
+```{r}
+boxplot(db$BMI, main = "BMI Distribution", ylab = "BMI in kg/m2")
+```
+
+```{r}
+summary(db$BMI)
+```
+
+The CDC classifies BMI into several categories Underweight: less than 18.5 Healthy weight: 18.5 to less than 25 Overweight: 25 to less than 30 Obesity: 30 or greater
+
+```{r}
+boxplot(waist_hip_ratio ~ gender, data = db, names = c("Males", "Females"), main = "Waist/Hip Ratio Distribution by Gender", xlab = "Gender")
+```
+
+```{r}
+summary(db$waist_hip_ratio)
+```
+
+```{r}
+db %>%
+  mutate(gender = ifelse(gender == 0, "Male", "Female")) %>%
+  group_by(gender) %>%
+  summarise(
+    count = n(),  
+    mean = mean(waist_hip_ratio, na.rm = TRUE),  
+    sd = sd(waist_hip_ratio, na.rm = TRUE),  
+    min = min(waist_hip_ratio, na.rm = TRUE),  
+    max = max(waist_hip_ratio, na.rm = TRUE)
+  )
+```
+
+Waist-to-hip ratio (WHR) is used as an indicator of health. It is calculated by waist circumference measurement divided by hip circumference measurement. According to the World Health Organization a WHR greater than 0.90 inches for men and greater than 0.85 for women is an indication for significant risk of metabolic complications.
+
+```{r}
+boxplot(db$tcl, main = "Total Cholesterol Distribution", ylab = "mg/dL")
+```
+
+```{r}
+summary(db$tcl)
+```
+
+Total Cholesterol Ranges as defined by the American Heart Association Normal: less than 200mg/dL Borderline high: 200-239mg/dL High: 240mg/dL or greater
+
+```{r}
+boxplot(hdl ~ gender, data = db, names = c("Males", "Females"), main = "HDL Distribution by Gender", xlab = "Gender", ylab = "mg/dL")
+```
+
+```{r}
+db %>%
+  mutate(gender = ifelse(gender == 0, "Male", "Female")) %>%
+  group_by(gender) %>%
+  summarise(
+    count = n(),  
+    mean = mean(hdl, na.rm = TRUE),  
+    sd = sd(hdl, na.rm = TRUE),  
+    min = min(hdl, na.rm = TRUE),  
+    max = max(hdl, na.rm = TRUE)
+  )
+```
+
+According to Mayo Clinic High Density Lipid Protein or HDL level recommendations vary based on gender. Optimal for levels Men and Women: 60 mg/dL or greater At Risk levels Men: less than 40mg/dL Women: less than 50mg/dL
+
+```{r}
+boxplot(db$glucose, main = "Glucose Level Distribution", ylab = "mg/dL")
+```
+
+```{r}
+summary(db$glucose)
+```
+
+According to the National Institute of Health in healthy individuals glucose levels are typically stable between 80 and 120 mg/dL. Elevated or depressed glucose levels are a symptom of diabetes which is diagnosed, in part, on elevated HbA1c.
+
+```{r}
+db.cor <- db[c("a1c", "BMI","weight","waist_hip_ratio", "tcl", "hdl", "glucose")]
+cor(db.cor)
+```
+
+Above is a Pearson's correlation table, evaluating statistical probability of correlation between the included features. Values can range between -1 and 1. Values closer to 1 indicate a strong positive correlation, as one variable increases the other variable tends to increase as well. While values near 0 indicate weak to no correlation. Values close to -1 indicate a strong negative correlation, which is an inverse relationship, as one variable increases the other tends to decrease.
+
+# Part 4
+
+```{r}
+
+db.partial <- db[c("a1c", "BMI", "weight", "waist_hip_ratio", "tcl", "hdl", "glucose")]
+```
+
+```{r}
+if (!require(PerformanceAnalytics)) install.packages("PerformanceAnalytics")
+library(PerformanceAnalytics)
+chart.Correlation(db.partial, histogram = TRUE)
+```
+
+```{r}
+regHgA1c <- lm(a1c~BMI+weight+waist_hip_ratio+tcl+hdl+glucose, data = db)
+```
+
+```{r}
+if (!require(jtools)) install.packages('jtools')
+library(jtools)
+summ(regHgA1c, confint = TRUE)
+```
+
+Linear Regression Equation
+
+HgA1c = 0.02*BMI - 0*weight + 1.89*waist_hip_ratio + 0.01*TCL - 0.01*HDL + 0.03*glucose - 0.24
+
+Based on the above linear regression and confidence interval, with a significance level of 0.05, in our population of interest, we are 95% confident that for every one unit increase in a person's total cholesterol their HgA1c is predicted to increase at most 0.01 mg/dL or may not increase at all. And in our population of interest, we are 95% confident that for every one unit increase in a person's glucose their HgA1c is predicted to increase at least 0.02 and at most 0.03 mg/dL. We can place strong confidence in these confidence intervals because the p-values are < 0.01. We do not have sufficient confidence in a relationship between HgA1c and BMI, weight, waist to hip ratio and HDL based on the respective p-values. 
+
+```{r}
+if (!require(interactions)) install.packages('interactions')
+library(interactions)
+interact_plot(regHgA1c, pred = tcl, modx = glucose, plot.points = TRUE)
+```
+
+##Part 5 Run and present the results of all diagnostic tests that pertain to linear models. If your diagnostics show that your model specification violates any of the assumptions of your regression model, you should attempt to fix the problem and try again. Should your model continue to violate assumptions (after two attempts to address the issue), you may report that as part of your results and suggest an alternative model that might fit the data better.
+#Test of Assumptions
+
+##Independence of observations
+The data was collected from Black participants living in rural Virginia, it is reasonable to assume that the observations are independent of each other.  However it is worthy to note that there is not information if any of the participants lived in the same household. This could indicate dependencies between observations due to similar diet and lifestyle.   
+
+##Residual errors are uncorrelated with all independent variables test
+
+```{r}
+if (!require(car)) install.packages('car')
+library(car)
+residualPlots(regHgA1c)
+```
+
+Glucose graph line appears to be curved and the p value is 0.013, which is significant, indicating glucose correlates with residuals, However the Tukey's test p value is 0.29 which is not below the significance value, but may still be indicative that there is a better suited model than the one used.  
+
+```{r}
+#made a new regression model w/out variable glucose
+reg2 <- lm(a1c~BMI+weight+waist_hip_ratio+tcl+hdl, data = db)
+```
+
+```{r}
+residualPlots(reg2)
+```
+
+TCL and fitted values still have a strong curve so fails. Also Tukey's test is 0.01 meaning that there is a different regression model that fits the data better. Solution make a new regression without TCL or glucose
+
+```{r}
+reg3 <- lm(a1c~BMI+weight+waist_hip_ratio+hdl, data = db)
+```
+
+```{r}
+#run another residual plot w/out tcl or glucose
+residualPlots(reg3)
+```
+
+Testing Residual Error distribution
+
+```{r}
+db.partial$resid <- resid(regHgA1c)
+```
+```{r}
+hist(db.partial$resid)
+```
+```{r}
+
+library(car)
+qqPlot(db.partial$resid)
+```
+```{r}
+shapiro.test(db.partial$resid)
+```
+
+Based on the results of the histogram, the qqplot and Shapiro-Wilk test it would appear the residuals are not evenly distributed. This violates the linear assumption that residuals are distributed evenly.  
+
+Test Autocorrelation of residuals
+```{r}
+plot(seq(1:nrow(db.partial)),db.partial$resid, )
+```
+There is a strong band of data points across the plot, again indicating that the residuals are not normally distributed, failing the linear tests of assumption.  
+
+
+Multicollinearity test
+
+```{r}
+#made a partial dataset with only independent variables
+db.iv <- db[c("glucose", "BMI", "weight", "waist_hip_ratio", "tcl", "hdl")]
+```
+
+```{r}
+cor(db.iv)
+```
+Based on the correlation table of independent variables it would appear that weight has the most significant correlations with HDL, waist to hip ratio, and in particular BMI, which is reasonable given weight is used to calculate BMI.  
+
+
+```{r}
+# I can rerun regression removing weight variable to see if that makes a difference
+db2 <- db[c("a1c", "BMI", "waist_hip_ratio", "tcl", "hdl", "glucose")] #dataset w/out weight
+regdb2 <- lm(a1c~BMI+waist_hip_ratio+tcl+hdl+glucose, data = db) #new regression on dataset
+db2$resid <- resid(regdb2) #residual column in new dataset
+```
+
+```{r}
+residualPlots(regdb2)
+```
+
+
+The residual plot of glucose is still showing that there may be correlation between residuals and glucose.  Which is not unreasonable because HgA1c is a reflection of glucose levels over time so it is understandable that a regression would show correlation.  
+
+```{r}
+#made a partial dataset with only independent variables
+dbiv2 <- db[c("glucose", "BMI", "waist_hip_ratio", "tcl", "hdl")]
+cor(dbiv2)
+```
+It would appear that the independent variables are not stronly correlated with each other after removing weight variable.  
+
+
+##Testing Homoscedasticity of Residual Errors
+
+```{r}
+residualPlots(regdb2, ~1, fitted=TRUE)
+```
+The residuals appear to be heteroscedastic as evidenced by the strong grouping on the graph above, this fails the linear test of assumption of homoscedasticity.  
+
+
+```{r}
+db3 <- db[c("a1c", "BMI", "waist_hip_ratio", "tcl", "hdl")] #dataset without weight or glucose
+regdb3 <- lm(a1c~BMI+waist_hip_ratio+tcl+hdl, data = db) #new regression on dataset
+db3$resid <- resid(regdb3) #residual column in new dataset
+```
+
+```{r}
+residualPlots(regdb3)
+```
+The results again show correlation as they did above when removing other variables.  It would appear that linear regression may not be an appropriate model for this data set.  This is because multiple tests of linear assumption were failed thus we cannot trust the validity of the linear model.  The independent variables were chosen because they are typically viewed as indicators of health and it would be logical that the variables may correlate with one another.  A non-linear approach may be more appropriate for this data set, such as logistic regression which could be used to "compare the relative odds of the occurrence of the outcome of interest, given exposure to the variable of interest," (Bzovsky, 2022).  
+  
+
+Bzovsky, S., Phillips, M.R., Guymer, R.H. et al. The clinician’s guide to interpreting a regression analysis. Eye 36, 1715–1717 (2022). https://doi.org/10.1038/s41433-022-01949-z
+
+
+##Limitations
+The preceding analysis is based on only 360 individuals, limited to data on Black participants, living in rural Virginia.  This limits generality of any potential findings of analysis.  To more clearly answer the research question a more diverse and larger dataset would be more appropriate.  In future analysis to answer the research question, it may also be more appropriate to include data on variables such as diet, exercise, and genetics because these factors can interfere with determining the relationship between the variables and HgA1c.  Also the data is a cross section of the participants, a longitudinal study may be more appropriate to determine the relationship between the variables and HgA1c. Although due to the close correlation between the variables it may not be possible to use a model to determine the variables relationship to HgA1c due to multicollinearity between the variables.  
+
+
+
+
+
+
+

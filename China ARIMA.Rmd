@@ -1,0 +1,221 @@
+---
+title: "Time Series: China, Final Project DA823"
+author: "Ellen Bobby"
+date: 
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE}
+if (!require(dplyr)) install.packages('dplyr') 
+library(dplyr)
+if (!require(fpp3)) install.packages('fpp3') 
+library(fpp3)
+if (!require(tidyverse)) install.packages('tidyverse') 
+library(tidyverse)
+```
+
+## Population
+
+```{r, echo=FALSE}
+china<-global_economy|>filter(Code=="CHN")|>
+  mutate(Pop = Population/1e9)
+autoplot(china, Pop)+labs(title = "Population of China 1960-2017", 
+                                     x="Year", y="Population in Billions")
+```
+
+This graph shows the progression of China’s population from 1960 to 2017. At the start of the graph at 1961 you can see a decrease in population, this is due to the Great Chinese Famine. Then within just 20 years there was a rapid growth in population, from less than 500 million in 1961 to over a billion people. Significant events and policies can be attributed to the country’s population changes throughout this time series.
+
+```{r, echo=FALSE, warning=FALSE}
+china <- china|>
+  mutate(Pop_change = Population - lag(Population))
+
+ggplot(china, aes(x = Year, y = Pop_change/1e6)) +  
+  geom_line() + geom_point() +
+  labs(title = "Annual Change in Population",
+       x = "Year", y = "Population Change in Millions")
+```
+
+This graph shows the change in population year over year. The Great Chinese famine, which was for the most part, was caused by decisions made by the Chinese government, spanned from 1959 to 1961 (Carnegie Council for Ethics in International Affairs, 1976). The data shows a decrease in population of approximately 7 million people between 1960 and 1961. It’s worth noting that former communist party officials and international experts, estimate deaths resulting from the famine range from 20 to 43 million (Carnegie Council for Ethics in International Affairs, 1976). And while population includes birth and death rates the recorded data may not be telling the full story.
+
+Later in the 1960s the population greatly increased due to agricultural advances, policy changes and propaganda campaign promoting large families (Jian, 2013). By the 1970s Communist party officials were faced with an exponentially increasing population. To quell this rise the Chinese government shifted their propaganda message to encourage small families and later implemented the infamous 1 child policy in 1980 (Jian, 2013). At the same time the country was also rapidly industrializing and more citizens were migrating to cities where there were more resources available to them and this had an overall positive impact on life expectancy (Wen, 2016). But by the late 1980s we can see that population growth slowed, it was still overall increasing but less than previous decades.
+
+### Determining Data Stationarity
+
+Because the population time series has a strong trend over time, it is necessary to determine if the series can be made stationary via differencing to meet the assumptions of the forecasting ARIMA model. This ensures that the model can accurately capture and forecast patterns in the series.
+
+```{r ACF to Check if Stationary, echo=FALSE}
+china|>ACF(Population
+           )|>autoplot()+labs(title = "Population ACF Plot")
+```
+
+The ACF plot above shows a slow decay which is characteristic of non-stationary data.
+
+```{r, echo=FALSE}
+china|>features(Population, unitroot_ndiffs)
+```
+
+The unit root test indicated two levels of differencing is required to make the population series stationary.
+
+```{r Differencing, echo=FALSE}
+china<-china|>mutate(Pop_diff2 = difference(difference(Population)))
+china|>features(Pop_diff2, unitroot_kpss)
+```
+
+After differencing twice the The KPSS p value is greater than 0.01 indicating that the population series is stationary. Meaning the series is suitable for forecasting with an ARIMA model.
+
+### ACF and PACF Plots
+
+Due to the Great Chinese Famine at the start of the series the first few years are outliers and have thus been removed from the below ACF and PACF plots.
+
+```{r, echo=FALSE, warning=FALSE}
+china|>filter_index(1965~.)|>
+  gg_tsdisplay(Pop_diff2, plot_type = "partial") +
+  labs(title = "ACF & PACF plots of Population Differenced x2")
+```
+
+Based on the plots above an AR model ARIMA(1,2,0) could be used because there is a significant spike at lag 1 in the PACF plot, and while lag 6 is above the threshold as well it does not appear to be part of a pattern and is more likely an anomaly. Or an MA model of ARIMA(0,2,1) could be used because there is a strong spike at lag 1 in the ACF plot then the lags decay. However the AR model ARIMA(1,2,0) makes more sense because in an AR model, the forecasted value is predicted based on the immediate preceding value, this is appropriate for population data which typically has slower changing trends (Milvus, n.d.).
+
+### Population Model
+
+```{r,  echo=FALSE}
+pop_fit<-china|>filter_index(1965~.)|>
+  model(search = ARIMA(Pop, stepwise = FALSE),
+        ar120 = ARIMA(Pop ~ pdq(1,2,0)),
+        ma021 = ARIMA(Pop ~ pdq(0,2,1)))
+```
+
+Below are the AICc results of the AR and MA models estimated using the ACF and PACF plots, and a more complex model determined by the R software. Based on the AICc values the model found by the R software best fits the population time series.
+
+```{r, echo=FALSE}
+pop_fit|>glance()
+```
+
+```{r, echo=FALSE}
+pop_fit|>select(.model = search)|>
+  gg_tsresiduals()+labs(title = "Residuals of ARIMA(3,2,2)")
+```
+
+The residuals for the AR model (3,2,2) appear acceptable, in that the time plot residuals appear random, the ACF plot has no significant spikes and the histogram is overall normally distributed. In the model specification I excluded the first few years of data due to the outliers from the Great Chinese Famine.
+
+### Population Forecast
+
+```{r, echo=FALSE, include=FALSE}
+china|>model(ARIMA(Pop, stepwise = FALSE))|>report()
+```
+
+```{r, echo=FALSE}
+china|>model(ARIMA(Pop, stepwise = FALSE))|>forecast(h=10)|>autoplot(china)+labs(
+  title = "Forecasted Population using ARIMA(3,2,2)", y= "Population in Billions")
+```
+
+The forecast for China's population above follows the historic the trend of the data overall, however the trend line of the forecast appears to over-estimate China's population growth, and not align with the changing trends. In 2023, for the first time since the great famine in 1961, China reported a decrease in population (Rieffel & Wang, 2024). Thought the decrease in population does fall within the confidence band of the forecast.
+
+\newpage
+
+## GDP
+
+China’s GDP remained relatively flat for decades until the late 1970s. Starting around 1980, the economy began to expand rapidly as the country shifted from a centrally planned system to a more market-oriented model (Wen, 2016). Major economic reforms, foreign investment, and infrastructure development fueled exponential growth, particularly after China joined the World Trade Organization in 2001 (What happened when China joined the WTO?, 2025). The GDP plot illustrates the scale and speed of China’s growth overall, reflecting domestic production, investment, and consumption (Kharas, 2016). The sharp rise in GDP reflects the country’s transformation into the world’s second-largest economy.
+
+```{r, echo=FALSE}
+china|>
+  ggplot(aes(x = Year, y = GDP/1e12)) +
+  geom_line(color="red") +
+  labs(title = "GDP",
+       x = "Year", y = "Trillions USD")
+```
+
+### Model
+
+```{r, echo=FALSE}
+GDP_fit<-china|>model(
+  search = ARIMA(log(GDP), stepwise = FALSE))
+GDP_fit|>report() 
+```
+
+```{r, echo=FALSE}
+GDP_fit|>select(search)|>gg_tsresiduals()+labs(title = "ARIMA(1,2,1) Residuals")
+```
+
+In the model of GDP I used log transformation, initially non-transformed the residuals of the model appeared to violate assumptions of ARIMA and under fit the data due to the sharp growth in GDP after China joined the World Trade Organization in 2001 (What Happened When China Joined the WTO?, 2025). After the transformation we can see that the residuals are normally distributed in the histogram and the plot appears random and centered on zero, with no significant spikes in the ACF plot.
+
+### GDP Forecast
+
+```{r, echo=FALSE}
+china|>model(ARIMA520 = ARIMA(GDP, stepwise = FALSE))|>forecast(h=10)|>autoplot(china)+labs(title = "GDP Forecast ARIMA(1,2,1)", y= "GDP in USD")
+```
+
+In the forecast above R found the best fitting model to be an ARIMA(1,2,1) based on log transformed GDP variable. The forecast overall appears reasonable, the trend line follows the data, as GDP tends to grow exponentially over time. Uncertainty in the forecasted GDP values increases with time as we can see in the dark and light blue confidence intervals.
+
+\newpage
+
+## Exports
+
+Between 1960 and 1980, China’s exports remained low, reflecting the country’s primarily agricultural economy at the time. This began to change in the 1980s when China launched major economic reforms, shifting toward industrial production and opening parts of the country to foreign investment through special economic zones (Wen, 2016). In the late 1980s, exports lagged due to international sanctions following the Tienanmen Square protests (Milestones in the History of U.S. Foreign Relations - Office of the Historian, n.d.). However, by 2001, China’s entry into the World Trade Organization marked a turning point, leading to a sharp rise in exports as the country became more integrated into the global economy (What Happened When China Joined the WTO?, 2025).
+
+The decline in exports after 2008 aligns with the global financial crisis, but also reflects China’s shifting priorities. As living standards rose and a middle class emerged, the country began to shift to domestic consumption rather than export-driven growth (Wen, 2016).
+
+```{r, echo=FALSE}
+china|>
+  ggplot(aes(x=Year, y=Exports))+
+  geom_line()+ labs(title = "Exports", y="% of GDP")
+```
+
+### Model
+
+```{r, echo=FALSE}
+export_fit<-china|>model(search = ARIMA(Exports, stepwise = FALSE))|>report()
+```
+
+```{r, echo=FALSE}
+export_fit|>gg_tsresiduals()+labs(title = "ARIMA(1,1,0) Residuals")
+```
+
+Because the first 20 years of China's exports series is very different then the later series data, I ran the model search again focusing the data from 1979 onward to determine if a better model could be found.
+
+```{r, echo=FALSE}
+export_fit<-china|>filter_index(1979~.)|>model(search = ARIMA(Exports, stepwise = FALSE))|>report()
+```
+
+```{r, echo=FALSE}
+export_fit|>gg_tsresiduals()+labs(title = "ARIMA(1,1,0) Residuals")
+```
+
+While the residuals of this model appear to be more random and the histogram is more normally distributed, basing the model on data post 1979 did not change the model choice. The best model appears to be ARIMA(1,1,0).
+
+### Exports Forecast
+
+```{r, echo=FALSE, fig.width=6, fig.height=5}
+export_fit|>forecast(h=10)|>
+  autoplot(china)+
+  labs(title = 
+         "Exports as % of GDP Forecasted ARIMA(1,1,0)", 
+       y= "% of GDP")+ theme(legend.position.inside = c(0.8, 0.2))  # x = 80%, y = 20% inside plot
+```
+
+A simple ARIMA(1,1,0) model appears to be the best fitting model of exports. The flat export forecast appears reasonable given the recent downward trend. As China’s middle class grows, the country is shifting toward domestic consumption rather than export-driven growth (Huld & Interesse, 2023). Additionally, the COVID-19 pandemic highlighted the risks of relying heavily on China for global manufacturing, prompting many companies to diversify their supply chains and shift production to countries with lower labor costs or more resilient logistics networks (Singh, n.d.).
+
+\newpage
+
+## *References*
+
+Jian, M. (2013, May 6). China’s barbaric one-child policy. The Guardian. <https://www.theguardian.com/books/2013/may/06/chinas-barbaric-one-child-policy>
+
+Carnegie Council for Ethics in International Affairs. (1976, May 1). The other China: Hunger Part I - The Three Red Flags of Death. <https://www.carnegiecouncil.org/media/series/100-for-100/the-other-china-hunger-part-i-the-three-red-flags-of-death>
+
+Rieffel, L., & Wang, X. (2024, May 1). China’s population could shrink to half by 2100. Scientific American. <https://www.scientificamerican.com/article/chinas-population-could-shrink-to-half-by-2100/>
+
+Milvus. (n.d.). What is the difference between autoregressive (AR) and moving average (MA) models?. Milvus.io. <https://milvus.io/ai-quick-reference/what-is-the-difference-between-autoregressive-ar-and-moving-average-ma-models>
+
+Kharas, H. (2016, July 5). How a growing global middle class could save the world’s economy. Pew Charitable Trusts. Retrieved from <https://www.pew.org/en/trend/archive/summer-2016/how-a-growing-global-middle-class-could-save-the-worlds-economy>
+
+What happened when China joined the WTO? (2025, February 6). CFR Education From the Council on Foreign Relations. <https://education.cfr.org/learn/reading/what-happened-when-china-joined-wto>
+
+Huld, A., & Interesse, G. (2023, May 24). China’s middle class – growth, policy, and consumption. China Briefing. <https://www.china-briefing.com/news/china-middle-class-growth-policy-and-consumption/>
+
+Singh, S. (n.d.). The shift away from Chinese manufacturing. London Chamber of Commerce and Industry. <https://www.londonchamber.co.uk/news-insights/news/lcci-updates/the-shift-away-from-chinese-manufacturing-exploring-the-whys/>
+
+Milestones in the history of U.S. Foreign Relations - Office of the Historian. (n.d.). <https://history.state.gov/milestones/1989-1992/tiananmen-square#>
